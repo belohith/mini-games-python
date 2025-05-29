@@ -61,6 +61,9 @@ If you prefer to run the application on your local machine, follow these steps:
 * **Matplotlib:** For visualizing the Maze Pathfinder algorithm steps.
 * **NumPy:** For numerical operations, especially in maze generation and Sudoku.
 
+## ✍️ Author
+
+Lohith Bollineni
 
 ## 📄 License
 
