@@ -2,31 +2,24 @@ import streamlit as st
 import queue
 import matplotlib.pyplot as plt
 import numpy as np
-import time # NEW: Import time for delays in animation
+import time
+import random # NEW: For random maze generation
 
 # --- Streamlit Page Setup ---
 st.set_page_config(page_title="Maze Pathfinder", page_icon="🗺️")
 st.title("🗺️ Maze Pathfinder")
 st.markdown("""
 This app visualizes a pathfinding algorithm (Breadth-First Search) solving a maze.
-The path is shown from 'O' (Start) to 'X' (End).
-Click 'Animate Solution' to see the BFS algorithm explore the maze step-by-step.
+Click **'Generate New Maze'** to create a unique solvable maze.
+Then, click **'Animate Solution'** to see the BFS algorithm explore it step-by-step.
 """)
 
-# --- Maze Definition ---
-maze = [
-    ["#", "O", "#", "#", "#", "#", "#", "#", "#"],
-    ["#", " ", " ", " ", " ", " ", " ", " ", "#"],
-    ["#", " ", "#", "#", " ", "#", "#", " ", "#"],
-    ["#", " ", "#", " ", " ", " ", "#", " ", "#"],
-    ["#", " ", "#", " ", "#", " ", "#", " ", "#"],
-    ["#", " ", "#", " ", "#", " ", "#", " ", "#"],
-    ["#", " ", "#", " ", "#", " ", "#", "#", "#"],
-    ["#", " ", " ", " ", " ", " ", " ", " ", "#"],
-    ["#", "#", "#", "#", "#", "#", "#", "X", "#"]
-]
+# --- Maze Configuration (You can adjust these values) ---
+MAZE_ROWS = 9
+MAZE_COLS = 9
+WALL_DENSITY = 0.35 # Percentage of cells that will become walls (approx.)
 
-# --- Core Pathfinder Logic (Adapted for Animation) ---
+# --- Core Pathfinder Logic Functions (Unchanged from previous version) ---
 
 def find_start(maze, start_char):
     """Finds the starting position of the maze."""
@@ -60,7 +53,6 @@ def find_path_bfs_animated(maze, start_char, end_char):
     """
     start_pos = find_start(maze, start_char)
     if not start_pos:
-        st.error(f"Error: Start character '{start_char}' not found in maze.")
         return []
 
     q = queue.Queue()
@@ -70,60 +62,118 @@ def find_path_bfs_animated(maze, start_char, end_char):
     visited.add(start_pos)
 
     animation_frames = []
-
-    # Initial snapshot: just the start position, no path yet shown
-    animation_frames.append({'visited': visited.copy(), 'path': []})
+    animation_frames.append({'visited': visited.copy(), 'path': []}) # Initial frame
 
     while not q.empty():
         current_pos, path = q.get()
         row, col = current_pos
 
-        # Add current state to frames (to show exploration)
-        animation_frames.append({'visited': visited.copy(), 'path': path.copy()}) # path.copy() for current path
+        animation_frames.append({'visited': visited.copy(), 'path': path.copy()}) # Frame for current step
         
-        # If we reached the end, add the final path and break
         if maze[row][col] == end_char:
-            # Final snapshot: all visited cells, and the found path
-            animation_frames.append({'visited': visited.copy(), 'path': path.copy()})
-            return animation_frames # Return all collected frames
+            animation_frames.append({'visited': visited.copy(), 'path': path.copy()}) # Final path frame
+            return animation_frames
 
-        # Explore neighbors
         neighbors = find_neighbors(maze, row, col)
         for neighbor in neighbors:
             r_n, c_n = neighbor
-            if neighbor not in visited and maze[r_n][c_n] != "#": # Not visited and not a wall
+            if neighbor not in visited and maze[r_n][c_n] != "#":
                 visited.add(neighbor)
                 new_path = path + [neighbor]
                 q.put((neighbor, new_path))
     
-    st.warning("No path found to the destination!")
-    return animation_frames # Return collected frames even if no path found
+    return animation_frames # Return collected frames even if no path found (no path exists)
 
-# --- Matplotlib Visualization Function ---
+# --- NEW: Random Maze Generation Function ---
+def generate_random_maze(rows, cols, wall_density, start_char='O', end_char='X', max_attempts=100):
+    """Generates a random maze and ensures it's solvable."""
+    if rows < 3 or cols < 3:
+        st.error("Maze dimensions must be at least 3x3 for a meaningful maze.")
+        return None
 
+    for attempt in range(max_attempts):
+        new_maze_grid = []
+        for r in range(rows):
+            row_chars = []
+            for c in range(cols):
+                if r == 0 or r == rows - 1 or c == 0 or c == cols - 1:
+                    row_chars.append("#") # Always make borders walls
+                elif random.random() < wall_density:
+                    row_chars.append("#") # Random wall
+                else:
+                    row_chars.append(" ") # Empty space
+            new_maze_grid.append(row_chars)
+
+        # Place start and end characters ensuring they are on pathable cells and distinct
+        # We'll try to put them in fixed spots near corners for consistency, but if those are walls, find alternatives.
+        possible_start_spots = [(0, 1), (1, 0), (1, 1)]
+        possible_end_spots = [(rows - 1, cols - 2), (rows - 2, cols - 1), (rows - 2, cols - 2)]
+
+        start_r, start_c = random.choice(possible_start_spots)
+        end_r, end_c = random.choice(possible_end_spots)
+
+        # Ensure start and end are within bounds for very small mazes and not same spot
+        start_r = min(start_r, rows - 1)
+        start_c = min(start_c, cols - 1)
+        end_r = min(end_r, rows - 1)
+        end_c = min(end_c, cols - 1)
+        
+        if (start_r, start_c) == (end_r, end_c): # If by chance they pick same spot
+            continue # Try again
+
+        temp_maze_for_check = [row[:] for row in new_maze_grid] # Deep copy for check
+        temp_maze_for_check[start_r][start_c] = start_char
+        temp_maze_for_check[end_r][end_c] = end_char
+        
+        # Check if a path exists
+        # We'll use a simplified BFS (without animation frame capturing) for this check
+        q_check = queue.Queue()
+        initial_check_pos = find_start(temp_maze_for_check, start_char)
+        if not initial_check_pos: # Start not placed correctly
+            continue
+        q_check.put(initial_check_pos)
+        
+        visited_check = set()
+        visited_check.add(initial_check_pos)
+
+        solvable = False
+        while not q_check.empty():
+            r_check, c_check = q_check.get()
+
+            if temp_maze_for_check[r_check][c_check] == end_char:
+                solvable = True
+                break
+
+            neighbors_check = find_neighbors(temp_maze_for_check, r_check, c_check)
+            for nr_check, nc_check in neighbors_check:
+                if (nr_check, nc_check) not in visited_check and temp_maze_for_check[nr_check][nc_check] != "#":
+                    visited_check.add((nr_check, nc_check))
+                    q_check.put((nr_check, nc_check))
+        
+        if solvable:
+            # If solvable, set 'O' and 'X' in the actual maze grid to be returned
+            new_maze_grid[start_r][start_c] = start_char
+            new_maze_grid[end_r][end_c] = end_char
+            return new_maze_grid
+    
+    st.error(f"Could not generate a solvable maze after {max_attempts} attempts. Returning a default maze.")
+    # Fallback to a simple, known-solvable maze if random generation consistently fails
+    return [
+        ["#", "O", "#"],
+        ["#", " ", "#"],
+        ["#", "X", "#"]
+    ]
+
+# --- Matplotlib Visualization Function (Unchanged from previous version) ---
 def draw_maze_matplotlib(maze_grid, visited_cells=None, current_path=None):
     """
     Draws the maze using matplotlib, highlighting visited cells and the current path.
-    :param maze_grid: The maze as a list of lists of characters.
-    :param visited_cells: Optional set of (row, col) tuples for visited cells (exploration).
-    :param current_path: Optional list of (row, col) tuples representing the current path in BFS.
-    :return: A matplotlib figure object.
     """
     rows = len(maze_grid)
     cols = len(maze_grid[0])
 
-    # Create a numerical representation of the maze for plotting
-    # Values will map to colors:
-    # 0: empty path
-    # 1: wall
-    # 2: start 'O'
-    # 3: end 'X'
-    # 4: visited cells (explored)
-    # 5: current path (leading to the cell being processed)
-    
     numeric_maze_display = np.zeros((rows, cols))
     
-    # First pass: map original maze elements
     for r in range(rows):
         for c in range(cols):
             if maze_grid[r][c] == '#':
@@ -135,23 +185,18 @@ def draw_maze_matplotlib(maze_grid, visited_cells=None, current_path=None):
             else:
                 numeric_maze_display[r][c] = 0 # Empty
 
-    # Second pass: Mark visited cells (exploration)
     if visited_cells:
         for r, c in visited_cells:
-            # Only mark empty cells as visited; don't overwrite start/end/walls
             if numeric_maze_display[r][c] == 0:
                 numeric_maze_display[r][c] = 4 # Visited (explored)
 
-    # Third pass: Mark the current path (highest priority visualization)
     if current_path:
         for r, c in current_path:
-            # Overwrite visited/empty cells for the current path
             if numeric_maze_display[r][c] in [0, 4]: 
                 numeric_maze_display[r][c] = 5 # Current Path
 
     fig, ax = plt.subplots(figsize=(cols, rows))
     
-    # Define custom colormap and normalization for 6 distinct values
     cmap_colors = ['#F0F0F0',    # 0: Empty (light gray)
                    '#333333',    # 1: Wall (dark gray/black)
                    '#4CAF50',    # 2: Start (green)
@@ -160,27 +205,24 @@ def draw_maze_matplotlib(maze_grid, visited_cells=None, current_path=None):
                    '#FF9800']    # 5: Current Path (orange - highlights the current path being evaluated)
     
     cmap = plt.matplotlib.colors.ListedColormap(cmap_colors)
-    bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5] # Define boundaries for each value
+    bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
     norm = plt.matplotlib.colors.BoundaryNorm(bounds, cmap.N)
 
     ax.imshow(numeric_maze_display, cmap=cmap, norm=norm, origin='upper', extent=[ -0.5, cols-0.5, rows-0.5, -0.5 ])
     
-    # Add grid lines
     ax.set_xticks(np.arange(cols+1)-0.5, minor=True)
     ax.set_yticks(np.arange(rows+1)-0.5, minor=True)
     ax.grid(which='minor', color='black', linestyle='-', linewidth=2)
     ax.tick_params(which='minor', size=0)
 
-    # Remove axis ticks and labels for cleaner display
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xticklabels([])
     ax.set_yticklabels([])
     
-    # Annotate cells with their original characters (O, X, #)
     for r in range(rows):
         for c in range(cols):
-            if maze_grid[r][c] in ['O', 'X', '#']: # Only annotate original fixed elements
+            if maze_grid[r][c] in ['O', 'X', '#']:
                 ax.text(c, r, maze_grid[r][c], ha='center', va='center', color='white' if maze_grid[r][c] == '#' else 'black', fontsize=12, weight='bold')
 
     plt.tight_layout()
@@ -189,41 +231,48 @@ def draw_maze_matplotlib(maze_grid, visited_cells=None, current_path=None):
 # --- Streamlit App Main Logic ---
 
 def run_pathfinder_app():
+    # Initialize maze in session state if not already present
+    if 'current_maze' not in st.session_state:
+        st.session_state.current_maze = generate_random_maze(MAZE_ROWS, MAZE_COLS, WALL_DENSITY)
+    
     # Placeholder for the animated maze visualization
     animation_placeholder = st.empty()
 
-    # Display initial maze when the page loads
-    initial_fig = draw_maze_matplotlib(maze)
+    # Display the current maze (either default or newly generated)
+    initial_fig = draw_maze_matplotlib(st.session_state.current_maze)
     animation_placeholder.pyplot(initial_fig)
-    plt.close(initial_fig) # Close the figure to free memory
+    plt.close(initial_fig)
 
     st.markdown("---") # Separator
 
-    # Slider for animation speed
-    animation_speed = st.slider("Animation Speed (seconds per step)", 0.01, 0.5, 0.05, 0.01)
+    # Controls and buttons
+    col1, col2 = st.columns(2)
 
-    if st.button("Animate Solution"):
-        st.subheader("Solving Process:")
-        with st.spinner("Generating animation frames..."):
-            frames = find_path_bfs_animated(maze, 'O', 'X')
-        
-        if frames:
-            for i, frame in enumerate(frames):
-                # Use the placeholder to update the plot in place
-                fig = draw_maze_matplotlib(maze, visited_cells=frame['visited'], current_path=frame['path'])
-                animation_placeholder.pyplot(fig)
-                plt.close(fig) # Close the figure immediately after displaying to free memory
-                
-                # Pause for the specified animation speed
-                time.sleep(animation_speed) 
+    with col1:
+        if st.button("Generate New Maze"):
+            with st.spinner("Generating a new solvable maze..."):
+                st.session_state.current_maze = generate_random_maze(MAZE_ROWS, MAZE_COLS, WALL_DENSITY)
+            st.success("New maze generated! Click 'Animate Solution' to solve.")
+            st.rerun() # Rerun to display the new maze immediately
+
+    with col2:
+        animation_speed = st.slider("Animation Speed (seconds per step)", 0.01, 0.5, 0.05, 0.01, key="speed_slider")
+
+        if st.button("Animate Solution"):
+            st.subheader("Solving Process:")
+            with st.spinner("Generating animation frames..."):
+                frames = find_path_bfs_animated(st.session_state.current_maze, 'O', 'X')
             
-            # After loop, check if a path was actually found (last frame will have a path)
-            if frames[-1]['path'] and maze[frames[-1]['path'][-1][0]][frames[-1]['path'][-1][1]] == 'X':
-                 st.success(f"Path found in {len(frames)} steps!")
+            if frames and frames[-1]['path'] and st.session_state.current_maze[frames[-1]['path'][-1][0]][frames[-1]['path'][-1][1]] == 'X':
+                for i, frame in enumerate(frames):
+                    fig = draw_maze_matplotlib(st.session_state.current_maze, visited_cells=frame['visited'], current_path=frame['path'])
+                    animation_placeholder.pyplot(fig)
+                    plt.close(fig)
+                    time.sleep(animation_speed) 
+                st.success(f"Path found in {len(frames)} steps!")
             else:
-                 st.warning("No path found to the destination in the provided maze.") # Should be caught by find_path_bfs_animated
-        else:
-            st.error("Could not find a path or generate animation frames.")
+                 st.error("No path found to the destination in the current maze. Try generating a new one.")
+
 
 # Run the Streamlit app function
 run_pathfinder_app()
