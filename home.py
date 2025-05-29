@@ -28,13 +28,6 @@ st.markdown("---")
 
 st.subheader("Important Notes & Disclaimers:")
 
-st.warning("""
-**Performance & Responsiveness:**
-Please note that these are simple projects running in a web environment.
-Complex animations or highly interactive elements (like the Aim Trainer game we discussed)
-might not feel as smooth or responsive as a native desktop application.
-This is a limitation of web frameworks designed for data applications.
-""")
 
 st.info("""
 **Browser Compatibility:**
