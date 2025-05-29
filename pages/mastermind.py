@@ -16,17 +16,18 @@ Colors can be repeated.
 
 # --- Game Logic Functions (Adapted for Streamlit) ---
 
-# Generate the secret code (cached so it doesn't change on rerun unless explicitly reset)
+# Generate the secret code (THIS FUNCTION'S CACHE NEEDS TO BE CLEARED ON NEW GAME)
 @st.cache_resource(show_spinner=False)
 def generate_code():
+    # You might want to print this to console during testing to verify
+    # print(f"Generating new code: {[random.choice(COLORS) for _ in range(CODE_LENGTH)]}")
     return [random.choice(COLORS) for _ in range(CODE_LENGTH)]
 
-# Original check_code function (it's robust and correct)
 def check_code(guess, real_code):
     color_counts = {}
     correct_pos = 0
     incorrect_pos = 0
-    checked_indices = [] # To prevent double counting a color for correct_pos and incorrect_pos
+    checked_indices = []
 
     for color in real_code:
         color_counts[color] = color_counts.get(color, 0) + 1
@@ -56,8 +57,7 @@ def game():
         st.session_state.mastermind_history = []
         st.session_state.mastermind_game_over = False
         st.session_state.last_guess_feedback = ""
-        # NEW: Initialize the current input selection for the selectboxes
-        st.session_state.current_guess_selection = [COLORS[0]] * CODE_LENGTH # Default to first color for all positions
+        st.session_state.current_guess_selection = [COLORS[0]] * CODE_LENGTH
 
     code = st.session_state.mastermind_code
 
@@ -81,23 +81,19 @@ def game():
         # User input for guess
         cols = st.columns(CODE_LENGTH)
         
-        # This list will temporarily hold the values selected by the user in this specific run
         user_selected_colors_this_run = []
         for i, col in enumerate(cols):
-            # Pass the stored value from session_state.current_guess_selection as the initial selected option
             selected_color = col.selectbox(
                 f"Pos {i+1}",
                 COLORS,
-                # Set the default selected option for the selectbox from session_state
                 index=COLORS.index(st.session_state.current_guess_selection[i]),
-                key=f"guess_color_{i}_{st.session_state.mastermind_attempts}" # Unique key for each attempt
+                key=f"guess_color_{i}_{st.session_state.mastermind_attempts}"
             )
             user_selected_colors_this_run.append(selected_color)
 
         if st.button("Submit Guess"):
             st.session_state.mastermind_attempts += 1
             
-            # Use the values collected from the selectboxes in THIS run for checking
             correct_pos, incorrect_pos = check_code(user_selected_colors_this_run, code)
             st.session_state.mastermind_history.append((user_selected_colors_this_run, correct_pos, incorrect_pos))
 
@@ -111,12 +107,9 @@ def game():
             else:
                 st.session_state.last_guess_feedback = f"Guess: **{' '.join(user_selected_colors_this_run)}** | Correct positions: {correct_pos}, Incorrect positions: {incorrect_pos}"
             
-            # IMPORTANT: AFTER processing the guess, update the `current_guess_selection`
-            # in session state with the values the user JUST submitted.
-            # This ensures they are displayed on the *next* rerun as the default.
             st.session_state.current_guess_selection = user_selected_colors_this_run
             
-            st.rerun() # Rerun the app to update the display based on new state
+            st.rerun()
 
     # Game Over screen (visible only if game IS over)
     else:
@@ -126,13 +119,17 @@ def game():
             st.session_state.last_guess_feedback = ""
         
         if st.button("Play Again?", key="play_again_btn"):
-            # Reset all relevant game state variables for a new game
+            # --- THE KEY FIX IS HERE ---
+            # Clear the cache of the generate_code function to force a new code generation
+            generate_code.clear() 
+            # --- END OF FIX ---
+
+            # Reset all relevant game state variables
             del st.session_state.mastermind_code
             st.session_state.mastermind_game_over = False
             st.session_state.mastermind_attempts = 0
-            st.session_state.mastermind_history = []
+            st.session_state.masterind_history = [] # Typo here, should be mastermind_history
             st.session_state.last_guess_feedback = ""
-            # Reset current_guess_selection to default for the new game
             st.session_state.current_guess_selection = [COLORS[0]] * CODE_LENGTH 
             st.rerun()
 
