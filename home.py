@@ -34,5 +34,3 @@ st.info("""
 While Streamlit aims for broad browser compatibility, optimal performance and visual fidelity
 may vary slightly across different web browsers and devices.
 """)
-
-st.write("Built with ❤️ and Streamlit.")
